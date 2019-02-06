@@ -1,11 +1,12 @@
 package com.revenuecat.purchasesunity;
 
 import android.content.Context;
+import android.support.annotation.NonNull;
 import android.util.Log;
 
 import com.android.billingclient.api.SkuDetails;
-import com.revenuecat.purchases.PurchaserInfo;
-import com.revenuecat.purchases.Purchases;
+import com.revenuecat.purchases.*;
+import com.revenuecat.purchases.interfaces.*;
 import com.unity3d.player.UnityPlayer;
 
 import org.json.JSONArray;
@@ -20,42 +21,48 @@ import java.util.Map;
 import static com.revenuecat.purchases.Purchases.AttributionNetwork.ADJUST;
 
 public class PurchasesWrapper {
+    private static final String RECEIVE_PRODUCTS = "_receiveProducts";
+    private static final String ALIAS_CREATED = "_aliasCreated";
+    private static final String RECEIVE_PURCHASER_INFO = "_receivePurchaserInfo";
+    private static final String RESTORE_TRANSACTIONS = "_restoreTransactions";
+    private static final String IDENTIFY = "_identify";
+    private static final String RESET = "_reset";
+    private static final String MAKE_PURCHASE = "_makePurchase";
+    private static final String GET_ENTITLEMENTS = "_getEntitlements";
+    private static final String GET_APP_USER_ID = "_getAppUserID";
+    private static final String GET_PURCHASER_INFO = "_getPurchaserInfo";
+
     private static String gameObject;
-
-    private static Purchases.PurchasesListener listener = new Purchases.PurchasesListener() {
-
+    private static UpdatedPurchaserInfoListener listener = new UpdatedPurchaserInfoListener() {
         @Override
-        public void onCompletedPurchase(String sku, PurchaserInfo purchaserInfo) {
-            sendPurchaserInfo(purchaserInfo, sku, true, null, false);
+        public void onReceived(@NonNull PurchaserInfo purchaserInfo) {
+            sendJSONObject(purchaserInfoJSON(purchaserInfo), RECEIVE_PURCHASER_INFO);
         }
-
-        @Override
-        public void onFailedPurchase(Purchases.ErrorDomains domain, int code, String reason) {
-            sendPurchaserInfo(null, null, true, errorJSON(domain, code, reason), false);
-        }
-
-        @Override
-        public void onReceiveUpdatedPurchaserInfo(PurchaserInfo purchaserInfo) {
-            sendPurchaserInfo(purchaserInfo, null, false,null, false);
-        }
-
-        @Override
-        public void onRestoreTransactions(PurchaserInfo purchaserInfo) {
-            sendPurchaserInfo(purchaserInfo, null, false, null, true);
-        }
-
-        @Override
-        public void onRestoreTransactionsFailed(Purchases.ErrorDomains domain, int code, String reason) {
-            sendPurchaserInfo(null, null, false, errorJSON(domain, code, reason), true);
-        }
-
     };
+
+//    private static Purchases.PurchasesListener listener = new Purchases.PurchasesListener() {
+//
+//        @Override
+//        public void onCompletedPurchase(String sku, PurchaserInfo purchaserInfo) {
+//            sendPurchaserInfo(purchaserInfo, sku, true, null, false);
+//        }
+//
+//        @Override
+//        public void onFailedPurchase(Purchases.ErrorDomains domain, int code, String reason) {
+//            sendPurchaserInfo(null, null, true, errorJSON(domain, code, reason), false);
+//        }
+//
+//        @Override
+//        public void onReceiveUpdatedPurchaserInfo(PurchaserInfo purchaserInfo) {
+//            sendPurchaserInfo(purchaserInfo, null, false,null, false);
+//        }
+//
+//    };
 
     public static void setup(String apiKey, String appUserId, String gameObject_) {
         gameObject = gameObject_;
-        Purchases purchases = new Purchases.Builder(UnityPlayer.currentActivity, apiKey).appUserID(appUserId).build();
-        purchases.setListener(listener);
-        Purchases.setSharedInstance(purchases);
+        Purchases.configure(UnityPlayer.currentActivity, apiKey, appUserId);
+        Purchases.getSharedInstance().setUpdatedPurchaserInfoListener(listener);
     }
 
     public static void getProducts(String jsonProducts, String type) {
@@ -68,12 +75,18 @@ public class PurchasesWrapper {
                 productIds.add(product);
             }
 
-            Purchases.GetSkusResponseHandler handler = new Purchases.GetSkusResponseHandler() {
+            GetSkusResponseListener handler = new GetSkusResponseListener() {
                 @Override
-                public void onReceiveSkus(List<SkuDetails> skus) {
+                public void onReceived(List<SkuDetails> skus) {
                     sendSkuDetails(skus);
                 }
+
+                @Override
+                public void onError(@NonNull PurchasesError purchasesError) {
+                    sendJSONObject(errorJSON(purchasesError), RECEIVE_PRODUCTS);
+                }
             };
+
             Purchases purchases = Purchases.getSharedInstance();
             if (type.equals("subs")) {
                 purchases.getSubscriptionSkus(productIds, handler);
@@ -89,12 +102,30 @@ public class PurchasesWrapper {
     // makePurchase to upgrade/downgrade current subscriptions
     public static void makePurchase(String productIdentifier, String type, String oldSku) {
         ArrayList<String> oldSkuList = new ArrayList<>();
-        oldSkuList.add(oldSku);
-        Purchases.getSharedInstance().makePurchase(UnityPlayer.currentActivity, productIdentifier, type, oldSkuList);
+        if (oldSku != null) {
+            oldSkuList.add(oldSku);
+        }
+        Purchases.getSharedInstance().makePurchase(UnityPlayer.currentActivity, productIdentifier, type, oldSkuList, new PurchaseCompletedListener() {
+            @Override
+            public void onCompleted(@NonNull String productIdentifier, @NonNull PurchaserInfo purchaserInfo) {
+                JSONObject jsonObject = purchaserInfoJSON(purchaserInfo);
+                try {
+                    jsonObject.put("productIdentifier", productIdentifier);
+                } catch (JSONException e) {
+                    Log.e("Purchases", "Error sending message");
+                }
+                sendJSONObject(jsonObject, MAKE_PURCHASE);
+            }
+
+            @Override
+            public void onError(@NonNull PurchasesError purchasesError) {
+                sendJSONObject(errorJSON(purchasesError), MAKE_PURCHASE);
+            }
+        });
     }
 
     public static void makePurchase(String productIdentifier, String type) {
-        Purchases.getSharedInstance().makePurchase(UnityPlayer.currentActivity, productIdentifier, type);
+        makePurchase(productIdentifier, type, null);
     }
 
     public static void addAttributionData(String dataJson, String network) {
@@ -137,45 +168,80 @@ public class PurchasesWrapper {
     }
 
     public static void restoreTransactions() {
-        Purchases.getSharedInstance().restorePurchasesForPlayStoreAccount();
+        Purchases.getSharedInstance().restorePurchases(getPurchaserInfoListener(RESTORE_TRANSACTIONS));
     }
 
     public static void createAlias(String newAppUserID) {
-        Purchases.getSharedInstance().createAlias(newAppUserID, new Purchases.AliasHandler() {
+        Purchases.getSharedInstance().createAlias(newAppUserID, getPurchaserInfoListener(ALIAS_CREATED));
+    }
+
+    public static void identify(String newAppUserID) {
+        Purchases.getSharedInstance().identify(newAppUserID, getPurchaserInfoListener(IDENTIFY));
+    }
+
+    public static void reset() {
+        Purchases.getSharedInstance().reset(getPurchaserInfoListener(RESET));
+    }
+
+    public static void setAllowSharingStoreAccount(boolean allowSharingStoreAccount) {
+        Purchases.getSharedInstance().setAllowSharingPlayStoreAccount(allowSharingStoreAccount);
+    }
+
+    public static void getEntitlements() {
+        Purchases.getSharedInstance().getEntitlements(new ReceiveEntitlementsListener() {
             @Override
-            public void onSuccess() {
-                sendJSONObject(new JSONObject(), "_aliasCreated");
+            public void onReceived(@NonNull Map<String, Entitlement> entitlementMap) {
+                try {
+                    sendJSONObject(mapEntitlementMap(entitlementMap), GET_ENTITLEMENTS);
+                } catch (JSONException e) {
+                    logJSONException(e);
+                }
             }
 
             @Override
-            public void onError(Purchases.ErrorDomains errorDomains, int i, String s) {
-                sendJSONObject(errorJSON(errorDomains, i, s), "_aliasCreated");
+            public void onError(@NonNull PurchasesError purchasesError) {
+                sendJSONObject(errorJSON(purchasesError), GET_ENTITLEMENTS);
             }
         });
     }
 
-    public static void identify(String newAppUserID) {
-        Purchases.getSharedInstance().identify(newAppUserID);
+    public static void getAppUserID() {
+        JSONObject jsonObject = new JSONObject();
+        try {
+            jsonObject.put("appUserID", Purchases.getSharedInstance().appUserID);
+        } catch (JSONException e) {
+            logJSONException(e);
+        }
+        sendJSONObject(jsonObject, GET_APP_USER_ID);
     }
 
-    public static void reset() {
-        Purchases.getSharedInstance().reset();
+    public static void setDebugsEnabled(boolean enabled) {
+        Purchases.setDebugLogsEnabled(enabled);
+    }
+
+    public static void getPurchaserInfo() {
+        Purchases.getSharedInstance().getPurchaserInfo(getPurchaserInfoListener(GET_PURCHASER_INFO));
     }
 
     private static void logJSONException(JSONException e) {
         Log.e("Purchases", "JSON Error: " + e.getLocalizedMessage());
     }
 
+    private static JSONObject mapForSkuDetails(SkuDetails sku) throws JSONException {
+        JSONObject skuObject = new JSONObject();
+        skuObject.put("identifier", sku.getSku());
+        skuObject.put("description", sku.getDescription());
+        skuObject.put("price", sku.getPriceAmountMicros() / 1000000.0);
+        skuObject.put("priceString", sku.getPrice());
+        skuObject.put("title", sku.getTitle());
+        return skuObject;
+    }
+
     private static void sendSkuDetails(List<SkuDetails> skus) {
         JSONArray products = new JSONArray();
         for (SkuDetails sku : skus) {
             try {
-                JSONObject skuObject = new JSONObject();
-                skuObject.put("identifier", sku.getSku());
-                skuObject.put("description", sku.getDescription());
-                skuObject.put("price", sku.getPriceAmountMicros() / 1000000.0);
-                skuObject.put("priceString", sku.getPrice());
-                skuObject.put("title", sku.getTitle());
+                JSONObject skuObject = mapForSkuDetails(sku);
                 products.put(skuObject);
             } catch (JSONException e) {
                 logJSONException(e);
@@ -185,88 +251,130 @@ public class PurchasesWrapper {
         try {
             JSONObject object = new JSONObject();
             object.put("products", products);
-            sendJSONObject(object, "_receiveProducts");
+            sendJSONObject(object, RECEIVE_PRODUCTS);
         } catch (JSONException e) {
             logJSONException(e);
         }
     }
 
-    private static JSONObject errorJSON(Purchases.ErrorDomains domain, int code, String reason) {
+    private static JSONObject errorJSON(PurchasesError purchasesError) {
         JSONObject error = new JSONObject();
         try {
-            error.put("domain", domain.ordinal());
-            error.put("code", code);
-            error.put("message", reason);
+            error.put("domain", purchasesError.getDomain().ordinal());
+            error.put("code", purchasesError.getCode());
+            error.put("message", purchasesError.getMessage());
         } catch (JSONException e) {
             logJSONException(e);
         }
         return error;
     }
 
-    private static JSONObject purchaserInfoJSON(PurchaserInfo info) throws JSONException {
+    private static JSONObject purchaserInfoJSON(PurchaserInfo info) {
         JSONObject jsonInfo = new JSONObject();
+        try {
+            JSONArray activeSubs = new JSONArray();
+            for (String active : info.getActiveSubscriptions()) {
+                activeSubs.put(active);
+            }
 
-        JSONArray activeSubs = new JSONArray();
-        for (String active : info.getActiveSubscriptions()) {
-            activeSubs.put(active);
+            jsonInfo.put("activeSubscriptions", activeSubs);
+
+            JSONArray allPurchasedProductIdentifiers = new JSONArray();
+            for (String productId : info.getAllPurchasedSkus()) {
+                allPurchasedProductIdentifiers.put(productId);
+            }
+            jsonInfo.put("allPurchasedProductIdentifiers", allPurchasedProductIdentifiers);
+
+            Date latest = info.getLatestExpirationDate();
+            if (latest != null) {
+                jsonInfo.put("latestExpirationDate", info.getLatestExpirationDate().getTime() / 1000.0);
+            }
+
+            JSONArray expirationDateKeys = new JSONArray();
+            JSONArray expirationDateValues = new JSONArray();
+
+            Map<String, Date> allExpDates = info.getAllExpirationDatesByProduct();
+            for (String sku : allExpDates.keySet()) {
+                expirationDateKeys.put(sku);
+                expirationDateValues.put(allExpDates.get(sku).getTime() / 1000.0);
+            }
+
+            jsonInfo.put("allExpirationDateKeys", expirationDateKeys);
+            jsonInfo.put("allExpirationDateValues", expirationDateValues);
+        } catch (JSONException e) {
+            logJSONException(e);
         }
-
-        jsonInfo.put("activeSubscriptions", activeSubs);
-
-        JSONArray allPurchasedProductIdentifiers = new JSONArray();
-        for (String productId : info.getAllPurchasedSkus()) {
-            allPurchasedProductIdentifiers.put(productId);
-        }
-        jsonInfo.put("allPurchasedProductIdentifiers", allPurchasedProductIdentifiers);
-
-        Date latest = info.getLatestExpirationDate();
-        if (latest != null) {
-            jsonInfo.put("latestExpirationDate", info.getLatestExpirationDate().getTime() / 1000.0);
-        }
-
-        JSONArray expirationDateKeys = new JSONArray();
-        JSONArray expirationDateValues = new JSONArray();
-
-        Map<String, Date> allExpDates = info.getAllExpirationDatesByProduct();
-        for (String sku : allExpDates.keySet()) {
-            expirationDateKeys.put(sku);
-            expirationDateValues.put(allExpDates.get(sku).getTime() / 1000.0);
-        }
-
-        jsonInfo.put("allExpirationDateKeys", expirationDateKeys);
-        jsonInfo.put("allExpirationDateValues", expirationDateValues);
-
         return jsonInfo;
     }
 
-    private static void sendPurchaserInfo(PurchaserInfo info, String completedTransaction, Boolean isPurchase, JSONObject error, Boolean isRestore) {
-        JSONObject message = new JSONObject();
-
-        try {
-            if (info != null) {
-                message.put("purchaserInfo", purchaserInfoJSON(info));
-            }
-
-            if (completedTransaction != null) {
-                message.put("productIdentifier", completedTransaction);
-            }
-
-            if (error != null) {
-                message.put("error", error);
-            }
-
-            message.put("isPurchase", isPurchase);
-            message.put("isRestore", isRestore);
-
-            sendJSONObject(message, "_receivePurchaserInfo");
-
-        } catch (JSONException e) {
-            Log.e("Purchases", "Error sending message");
-        }
-    }
+//    private static void sendPurchaserInfo(PurchaserInfo info, String completedTransaction, Boolean isPurchase,
+//                                          JSONObject error, Boolean isRestore, String method) {
+//        JSONObject message = new JSONObject();
+//
+//        try {
+//            if (info != null) {
+//                message.put("purchaserInfo", purchaserInfoJSON(info));
+//            }
+//
+//            if (completedTransaction != null) {
+//                message.put("productIdentifier", completedTransaction);
+//            }
+//
+//            if (error != null) {
+//                message.put("error", error);
+//            }
+//
+//            message.put("isPurchase", isPurchase);
+//            message.put("isRestore", isRestore);
+//
+//            sendJSONObject(message, method);
+//        } catch (JSONException e) {
+//            Log.e("Purchases", "Error sending message");
+//        }
+//    }
 
     private static void sendJSONObject(JSONObject object, String method) {
         Log.e("Purchases", object.toString());
         UnityPlayer.UnitySendMessage(gameObject, method, object.toString());
+    }
+
+    @NonNull
+    private static ReceivePurchaserInfoListener getPurchaserInfoListener(final String method) {
+        return new ReceivePurchaserInfoListener() {
+            @Override
+            public void onReceived(@NonNull PurchaserInfo purchaserInfo) {
+                sendJSONObject(purchaserInfoJSON(purchaserInfo), method);
+            }
+
+            @Override
+            public void onError(@NonNull PurchasesError purchasesError) {
+                sendJSONObject(errorJSON(purchasesError), method);
+            }
+        };
+    }
+
+    private static JSONObject mapEntitlementMap(@NonNull Map<String, Entitlement> entitlementMap) throws JSONException {
+        JSONObject response = new JSONObject();
+        for (String entId : entitlementMap.keySet()) {
+            Entitlement ent = entitlementMap.get(entId);
+            JSONObject offeringsMap = new JSONObject();
+            if (ent != null) {
+                Map<String, Offering> offerings = ent.getOfferings();
+                for (String offeringId : offerings.keySet()) {
+                    Offering offering = offerings.get(offeringId);
+                    if (offering != null) {
+                        SkuDetails skuDetails = offering.getSkuDetails();
+                        if (skuDetails != null) {
+                            JSONObject skuMap = mapForSkuDetails(skuDetails);
+                            offeringsMap.put(offeringId, skuMap);
+                        } else {
+                            offeringsMap.put(offeringId, JSONObject.NULL);
+                        }
+                    }
+                }
+            }
+            response.put(entId, offeringsMap);
+        }
+        return response;
     }
 }
