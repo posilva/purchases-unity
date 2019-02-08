@@ -79,4 +79,36 @@ public class PurchasesWrapperAndroid : PurchasesWrapper
         }
     }
 
+    public void SetAllowSharingStoreAccount(bool allow)
+    {
+        using (AndroidJavaClass purchases = new AndroidJavaClass("com.revenuecat.purchasesunity.PurchasesWrapper"))
+        {
+            purchases.CallStatic("setAllowSharingStoreAccount", allow);
+        }
+    }
+
+    public void SetDebugLogsEnabled(bool enabled)
+    {
+        using (AndroidJavaClass purchases = new AndroidJavaClass("com.revenuecat.purchasesunity.PurchasesWrapper"))
+        {
+            purchases.CallStatic("setDebugLogsEnabled", enabled);
+        }
+    }
+
+    public void GetPurchaserInfo()
+    {
+        using (AndroidJavaClass purchases = new AndroidJavaClass("com.revenuecat.purchasesunity.PurchasesWrapper"))
+        {
+            purchases.CallStatic("getPurchaserInfo");
+        }
+    }
+
+    public void GetEntitlements()
+    {
+        using (AndroidJavaClass purchases = new AndroidJavaClass("com.revenuecat.purchasesunity.PurchasesWrapper"))
+        {
+            purchases.CallStatic("getEntitlements");
+        }
+    }
+
 }

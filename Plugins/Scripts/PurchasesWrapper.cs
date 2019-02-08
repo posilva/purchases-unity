@@ -12,4 +12,8 @@ public interface PurchasesWrapper
 	void CreateAlias(string newAppUserID);
 	void Identify(string appUserID);
 	void Reset();
+    void SetAllowSharingStoreAccount(bool allow);
+    void SetDebugLogsEnabled(bool enabled);
+    void GetPurchaserInfo();
+    void GetEntitlements();
 }

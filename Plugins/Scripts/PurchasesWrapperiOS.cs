@@ -70,4 +70,39 @@ public class PurchasesWrapperiOS : PurchasesWrapper
         _RCReset();
     }
 
+    [DllImport("__Internal")]
+    private static extern void _RCSetAllowSharingStoreAccount(bool allow);
+    public void SetAllowSharingStoreAccount(bool allow)
+    {
+        _RCSetAllowSharingStoreAccount(allow);
+    }
+
+    [DllImport("__Internal")]
+    private static extern void _RCGetEntitlements();
+    public void GetEntitlements()
+    {
+        _RCGetEntitlements();
+    }
+
+    [DllImport("__Internal")]
+    private static extern void _RCGetAppUserID();
+    public void GetAppUserID()
+    {
+        _RCGetAppUserID();
+    }
+
+    [DllImport("__Internal")]
+    private static extern void _RCSetDebugLogsEnabled(bool enabled);
+    public void SetDebugLogsEnabled(bool enabled)
+    {
+        _RCSetDebugLogsEnabled(enabled);
+    }
+
+    [DllImport("__Internal")]
+    private static extern void _RCGetPurchaserInfo();
+    public void GetPurchaserInfo()
+    {
+        _RCGetPurchaserInfo();
+    }
+
 }

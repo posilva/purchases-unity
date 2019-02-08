@@ -11,6 +11,7 @@ public class Purchases : MonoBehaviour
     public abstract class Listener : MonoBehaviour
     {
         public abstract void ProductsReceived(List<Product> products);
+        public abstract void ProductsReceiveFailed(Error error);
 
         public abstract void PurchaseSucceeded(string productIdentifier, PurchaserInfo purchaserInfo);
         public abstract void PurchaseFailed(string productIdentifier, Error error, bool userCanceled);
@@ -18,9 +19,8 @@ public class Purchases : MonoBehaviour
         public abstract void PurchaserInfoReceived(PurchaserInfo purchaserInfo);
         public abstract void PurchaserInfoReceiveFailed(Error error);
 
-        public abstract void RestoredPurchases(PurchaserInfo purchaserInfo);
-        public abstract void RestorePurchasesFailed(Error error);
-        public abstract void AliasCreated(Error error);
+        public abstract void EntitlementsReceived(Dictionary<String, Entitlement> entitlements);
+        public abstract void EntitlementsReceiveFailed(Error error);
     }
 
     private class PurchasesWrapperNoop : PurchasesWrapper
@@ -61,6 +61,31 @@ public class Purchases : MonoBehaviour
         }
 
         public void Reset()
+        {
+
+        }
+
+        public void SetAllowSharingStoreAccount(bool allow)
+        {
+
+        }
+
+        public void GetAppUserID()
+        {
+
+        }
+
+        public void SetDebugLogsEnabled(bool enabled)
+        {
+
+        }
+
+        public void GetPurchaserInfo()
+        {
+
+        }
+
+        public void GetEntitlements()
         {
 
         }
@@ -141,6 +166,12 @@ public class Purchases : MonoBehaviour
         public string description;
         public float price;
         public string priceString;
+    }
+
+    [Serializable]
+    public class Entitlement
+    {
+        public Dictionary<String, Product> offerings;
     }
 
     [Tooltip("Your RevenueCat API Key. Get from https://app.revenuecat.com/")]
@@ -231,26 +262,53 @@ public class Purchases : MonoBehaviour
         wrapper.Reset();
     }
 
+    public void SetAllowSharingStoreAccount(bool allow)
+    {
+        wrapper.SetAllowSharingStoreAccount(allow);
+    }
+
+    public void SetDebugLogsEnabled(bool enabled)
+    {
+        wrapper.SetDebugLogsEnabled(enabled);
+    }
+
+    public void GetPurchaserInfo()
+    {
+        wrapper.GetPurchaserInfo();
+    }
+
+    public void GetEntitlements()
+    {
+        wrapper.GetEntitlements();
+    }
+
+    [Serializable]
+    private class ReceiveProductResponse
+    {
+        public ProductResponse productResponse;
+        public Error error;
+    }
+
     [Serializable]
     private class ProductResponse
     {
         public List<Product> products;
-    }
-
-    private void _receiveProducts(string productsJSON)
-    {
-        ProductResponse response = JsonUtility.FromJson<ProductResponse>(productsJSON);
-        listener.ProductsReceived(response.products);
+        public Error error;
     }
 
     [Serializable]
     private class ReceivePurchaserInfoResponse
     {
+        public PurchaserInfoResponse purchaserInfo;
+        public Error error;
+    }
+
+    [Serializable]
+    private class MakePurchaseResponse
+    {
         public string productIdentifier;
         public PurchaserInfoResponse purchaserInfo;
         public Error error;
-        public bool isRestore;
-        public bool isPurchase;
     }
 
     [Serializable]
@@ -263,17 +321,54 @@ public class Purchases : MonoBehaviour
         public List<long> allExpirationDateValues;
     }
 
-    private void _receivePurchaserInfo(string arguments)
+    [Serializable]
+    public class EntitlementsResponse
+    {
+        public Dictionary<String, Entitlement> entitlements;
+        public Error error;
+    }
+
+    private void _receiveProducts(string productsJSON)
+    {
+        Debug.Log(productsJSON);
+        var response = JsonUtility.FromJson<ProductResponse>(productsJSON);
+        var error = (response.error.message != null) ? response.error : null;
+
+        if (error != null)
+        {
+            listener.ProductsReceiveFailed(error);
+        }
+        else
+        {
+            listener.ProductsReceived(response.products);
+        }
+    }
+
+    private void _getPurchaserInfo(string arguments)
     {
         var response = JsonUtility.FromJson<ReceivePurchaserInfoResponse>(arguments);
+        var error = (response.error.message != null) ? response.error : null;
+        var info = (response.purchaserInfo.activeSubscriptions != null)
+                    ? new PurchaserInfo(response.purchaserInfo)
+                    : null;
+        if (error != null)
+        {
+            listener.PurchaserInfoReceiveFailed(error);
+        }
+        else
+        {
+            listener.PurchaserInfoReceived(info);
+        }
+    }
+
+    private void _makePurchase(string arguments)
+    {
+        var response = JsonUtility.FromJson<MakePurchaseResponse>(arguments);
 
         var error = (response.error.message != null) ? response.error : null;
         var info = (response.purchaserInfo.activeSubscriptions != null)
             ? new PurchaserInfo(response.purchaserInfo)
             : null;
-
-        var isPurchase = response.isPurchase;
-        var isRestore = response.isRestore;
 
     #if UNITY_ANDROID
         bool userCanceled = (error != null && error.domain.Equals("1") && error.code == 1);
@@ -283,27 +378,68 @@ public class Purchases : MonoBehaviour
 
         if (error != null)
         {
-            if (isPurchase) {
-                listener.PurchaseFailed(response.productIdentifier, error, userCanceled);
-            } else if (isRestore) {
-                listener.RestorePurchasesFailed(error);
-            } else {
-                listener.PurchaserInfoReceiveFailed(error);
-            }
+            listener.PurchaseFailed(response.productIdentifier, error, userCanceled);
         } else {
-            if (isPurchase) {
-                listener.PurchaseSucceeded(response.productIdentifier, info);
-            } else if (isRestore) {
-                listener.RestoredPurchases(info);
-            } else {
-                listener.PurchaserInfoReceived(info);
-            }
+            listener.PurchaseSucceeded(response.productIdentifier, info);
         }
     }
 
-    private void _aliasCreated(string arguments)
+    private void _createAlias(string arguments)
     {
-        var error = JsonUtility.FromJson<Error>(arguments);
-        listener.AliasCreated((error.message != null) ? error : null);
+        ReceivePurchaserInfoMethod(arguments);
+    }
+
+    private void _receivePurchaserInfo(string arguments)
+    {
+        ReceivePurchaserInfoMethod(arguments);
+    }
+
+    private void _restoreTransactions(string arguments)
+    {
+        ReceivePurchaserInfoMethod(arguments);
+    }
+
+    private void _identify(string arguments)
+    {
+        ReceivePurchaserInfoMethod(arguments);
+    }
+
+    private void _reset(string arguments)
+    {
+        ReceivePurchaserInfoMethod(arguments);
+    }
+
+    private void _getEntitlements(string entitlementsJSON)
+    {
+        Debug.Log("entitlements " + entitlementsJSON);
+        var response = JsonUtility.FromJson<EntitlementsResponse>(entitlementsJSON);
+        var error = (response.error.message != null) ? response.error : null;
+
+        if (error != null)
+        {
+            listener.EntitlementsReceiveFailed(error);
+        }
+        else
+        {
+            listener.EntitlementsReceived(response.entitlements);
+        }
+    }
+
+    private void ReceivePurchaserInfoMethod(string arguments)
+    {
+        var response = JsonUtility.FromJson<ReceivePurchaserInfoResponse>(arguments);
+
+        var error = (response.error.message != null) ? response.error : null;
+        var info = (response.purchaserInfo.activeSubscriptions != null)
+                    ? new PurchaserInfo(response.purchaserInfo)
+                    : null;
+        if (error != null)
+        {
+            listener.PurchaserInfoReceiveFailed(error);
+        }
+        else
+        {
+            listener.PurchaserInfoReceived(info);
+        }
     }
 }

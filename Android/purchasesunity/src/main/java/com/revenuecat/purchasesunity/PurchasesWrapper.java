@@ -22,15 +22,14 @@ import static com.revenuecat.purchases.Purchases.AttributionNetwork.ADJUST;
 
 public class PurchasesWrapper {
     private static final String RECEIVE_PRODUCTS = "_receiveProducts";
-    private static final String ALIAS_CREATED = "_aliasCreated";
+    private static final String GET_PURCHASER_INFO = "_getPurchaserInfo";
+    private static final String MAKE_PURCHASE = "_makePurchase";
+    private static final String CREATE_ALIAS = "_createAlias";
     private static final String RECEIVE_PURCHASER_INFO = "_receivePurchaserInfo";
     private static final String RESTORE_TRANSACTIONS = "_restoreTransactions";
     private static final String IDENTIFY = "_identify";
     private static final String RESET = "_reset";
-    private static final String MAKE_PURCHASE = "_makePurchase";
     private static final String GET_ENTITLEMENTS = "_getEntitlements";
-    private static final String GET_APP_USER_ID = "_getAppUserID";
-    private static final String GET_PURCHASER_INFO = "_getPurchaserInfo";
 
     private static String gameObject;
     private static UpdatedPurchaserInfoListener listener = new UpdatedPurchaserInfoListener() {
@@ -39,25 +38,6 @@ public class PurchasesWrapper {
             sendJSONObject(purchaserInfoJSON(purchaserInfo), RECEIVE_PURCHASER_INFO);
         }
     };
-
-//    private static Purchases.PurchasesListener listener = new Purchases.PurchasesListener() {
-//
-//        @Override
-//        public void onCompletedPurchase(String sku, PurchaserInfo purchaserInfo) {
-//            sendPurchaserInfo(purchaserInfo, sku, true, null, false);
-//        }
-//
-//        @Override
-//        public void onFailedPurchase(Purchases.ErrorDomains domain, int code, String reason) {
-//            sendPurchaserInfo(null, null, true, errorJSON(domain, code, reason), false);
-//        }
-//
-//        @Override
-//        public void onReceiveUpdatedPurchaserInfo(PurchaserInfo purchaserInfo) {
-//            sendPurchaserInfo(purchaserInfo, null, false,null, false);
-//        }
-//
-//    };
 
     public static void setup(String apiKey, String appUserId, String gameObject_) {
         gameObject = gameObject_;
@@ -112,7 +92,7 @@ public class PurchasesWrapper {
                 try {
                     jsonObject.put("productIdentifier", productIdentifier);
                 } catch (JSONException e) {
-                    Log.e("Purchases", "Error sending message");
+                    logJSONException(e);
                 }
                 sendJSONObject(jsonObject, MAKE_PURCHASE);
             }
@@ -172,7 +152,7 @@ public class PurchasesWrapper {
     }
 
     public static void createAlias(String newAppUserID) {
-        Purchases.getSharedInstance().createAlias(newAppUserID, getPurchaserInfoListener(ALIAS_CREATED));
+        Purchases.getSharedInstance().createAlias(newAppUserID, getPurchaserInfoListener(CREATE_ALIAS));
     }
 
     public static void identify(String newAppUserID) {
@@ -205,17 +185,7 @@ public class PurchasesWrapper {
         });
     }
 
-    public static void getAppUserID() {
-        JSONObject jsonObject = new JSONObject();
-        try {
-            jsonObject.put("appUserID", Purchases.getSharedInstance().appUserID);
-        } catch (JSONException e) {
-            logJSONException(e);
-        }
-        sendJSONObject(jsonObject, GET_APP_USER_ID);
-    }
-
-    public static void setDebugsEnabled(boolean enabled) {
+    public static void setDebugLogsEnabled(boolean enabled) {
         Purchases.setDebugLogsEnabled(enabled);
     }
 
@@ -307,32 +277,6 @@ public class PurchasesWrapper {
         return jsonInfo;
     }
 
-//    private static void sendPurchaserInfo(PurchaserInfo info, String completedTransaction, Boolean isPurchase,
-//                                          JSONObject error, Boolean isRestore, String method) {
-//        JSONObject message = new JSONObject();
-//
-//        try {
-//            if (info != null) {
-//                message.put("purchaserInfo", purchaserInfoJSON(info));
-//            }
-//
-//            if (completedTransaction != null) {
-//                message.put("productIdentifier", completedTransaction);
-//            }
-//
-//            if (error != null) {
-//                message.put("error", error);
-//            }
-//
-//            message.put("isPurchase", isPurchase);
-//            message.put("isRestore", isRestore);
-//
-//            sendJSONObject(message, method);
-//        } catch (JSONException e) {
-//            Log.e("Purchases", "Error sending message");
-//        }
-//    }
-
     private static void sendJSONObject(JSONObject object, String method) {
         Log.e("Purchases", object.toString());
         UnityPlayer.UnitySendMessage(gameObject, method, object.toString());
@@ -365,8 +309,8 @@ public class PurchasesWrapper {
                     if (offering != null) {
                         SkuDetails skuDetails = offering.getSkuDetails();
                         if (skuDetails != null) {
-                            JSONObject skuMap = mapForSkuDetails(skuDetails);
-                            offeringsMap.put(offeringId, skuMap);
+                            JSONObject product = mapForSkuDetails(skuDetails);
+                            offeringsMap.put(offeringId, product);
                         } else {
                             offeringsMap.put(offeringId, JSONObject.NULL);
                         }
