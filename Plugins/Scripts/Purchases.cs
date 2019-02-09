@@ -19,7 +19,7 @@ public class Purchases : MonoBehaviour
         public abstract void PurchaserInfoReceived(PurchaserInfo purchaserInfo);
         public abstract void PurchaserInfoReceiveFailed(Error error);
 
-        public abstract void EntitlementsReceived(Dictionary<String, Entitlement> entitlements);
+        public abstract void EntitlementsReceived(Dictionary<string, Entitlement> entitlements);
         public abstract void EntitlementsReceiveFailed(Error error);
     }
 
@@ -150,29 +150,25 @@ public class Purchases : MonoBehaviour
         }
     }
 
-    [Serializable]
-    public class Error
-    {
-        public string message;
-        public int code;
-        public string domain;
-    }
-
-    [Serializable]
-    public class Product
-    {
-        public string title;
-        public string identifier;
-        public string description;
-        public float price;
-        public string priceString;
-    }
-
-    [Serializable]
     public class Entitlement
     {
-        public Dictionary<String, Product> offerings;
+
+        public Dictionary<string, Product> offerings;
+
+        public Entitlement(EntitlementResponse response)
+        {
+            this.offerings = new Dictionary<string, Product>();
+            foreach (Offering offering in response.offerings)
+            {
+                Debug.Log("offering " + offering.product);
+                if (offering.product.identifier != null) {
+                    this.offerings.Add(offering.offeringId, offering.product);
+                }
+            }
+        }
+
     }
+
 
     [Tooltip("Your RevenueCat API Key. Get from https://app.revenuecat.com/")]
     public string revenueCatAPIKey;
@@ -282,11 +278,149 @@ public class Purchases : MonoBehaviour
         wrapper.GetEntitlements();
     }
 
-    [Serializable]
-    private class ReceiveProductResponse
+    private void _receiveProducts(string productsJSON)
     {
-        public ProductResponse productResponse;
-        public Error error;
+        Debug.Log("_receiveProducts " + productsJSON);
+        var response = JsonUtility.FromJson<ProductResponse>(productsJSON);
+        var error = (response.error.message != null) ? response.error : null;
+
+        if (error != null)
+        {
+            listener.ProductsReceiveFailed(error);
+        }
+        else
+        {
+            listener.ProductsReceived(response.products);
+        }
+    }
+
+    private void _getPurchaserInfo(string purchaserInfoJSON)
+    {
+        Debug.Log("_getPurchaserInfo " + purchaserInfoJSON);
+        var response = JsonUtility.FromJson<ReceivePurchaserInfoResponse>(purchaserInfoJSON);
+        var error = (response.error.message != null) ? response.error : null;
+        var info = (response.purchaserInfo.activeSubscriptions != null)
+                    ? new PurchaserInfo(response.purchaserInfo)
+                    : null;
+        if (error != null)
+        {
+            listener.PurchaserInfoReceiveFailed(error);
+        }
+        else
+        {
+            listener.PurchaserInfoReceived(info);
+        }
+    }
+
+    private void _makePurchase(string makePurchaseResponseJSON)
+    {
+        Debug.Log("_makePurchase " + makePurchaseResponseJSON);
+        var response = JsonUtility.FromJson<MakePurchaseResponse>(makePurchaseResponseJSON);
+
+        var error = (response.error.message != null) ? response.error : null;
+        var info = (response.purchaserInfo.activeSubscriptions != null)
+            ? new PurchaserInfo(response.purchaserInfo)
+            : null;
+
+    #if UNITY_ANDROID
+        bool userCanceled = (error != null && error.domain.Equals("1") && error.code == 1);
+    #else
+        bool userCanceled = (error != null && error.domain == "SKErrorDomain" && error.code == 2);
+    #endif
+
+        if (error != null)
+        {
+            listener.PurchaseFailed(response.productIdentifier, error, userCanceled);
+        } else {
+            listener.PurchaseSucceeded(response.productIdentifier, info);
+        }
+    }
+
+    private void _createAlias(string purchaserInfoJSON)
+    {
+        Debug.Log("_createAlias " + purchaserInfoJSON);
+        ReceivePurchaserInfoMethod(purchaserInfoJSON);
+    }
+
+    private void _receivePurchaserInfo(string purchaserInfoJSON)
+    {
+        Debug.Log("_receivePurchaserInfo " + purchaserInfoJSON);
+        ReceivePurchaserInfoMethod(purchaserInfoJSON);
+    }
+
+    private void _restoreTransactions(string purchaserInfoJSON)
+    {
+        Debug.Log("_restoreTransactions " + purchaserInfoJSON);
+        ReceivePurchaserInfoMethod(purchaserInfoJSON);
+    }
+
+    private void _identify(string purchaserInfoJSON)
+    {
+        Debug.Log("_identify " + purchaserInfoJSON);
+        ReceivePurchaserInfoMethod(purchaserInfoJSON);
+    }
+
+    private void _reset(string purchaserInfoJSON)
+    {
+        Debug.Log("_reset " + purchaserInfoJSON);
+        ReceivePurchaserInfoMethod(purchaserInfoJSON);
+    }
+
+    private void _getEntitlements(string entitlementsJSON)
+    {
+        Debug.Log("_getEntitlements " + entitlementsJSON);
+        EntitlementsResponse response = JsonUtility.FromJson<EntitlementsResponse>(entitlementsJSON);
+        var error = (response.error.message != null) ? response.error : null;
+        if (error != null)
+        {
+            listener.EntitlementsReceiveFailed(error);
+        }
+        else
+        {
+            Dictionary<string, Entitlement> entitlements = new Dictionary<string, Entitlement>();
+            foreach(EntitlementResponse entitlementResponse in response.entitlements)
+            {
+                Debug.Log(entitlementResponse.entitlementId);
+                entitlements.Add(entitlementResponse.entitlementId, new Entitlement(entitlementResponse));
+            }
+            listener.EntitlementsReceived(entitlements);
+        }
+    }
+
+    private void ReceivePurchaserInfoMethod(string arguments)
+    {
+        var response = JsonUtility.FromJson<ReceivePurchaserInfoResponse>(arguments);
+
+        var error = (response.error.message != null) ? response.error : null;
+        var info = (response.purchaserInfo.activeSubscriptions != null)
+                    ? new PurchaserInfo(response.purchaserInfo)
+                    : null;
+        if (error != null)
+        {
+            listener.PurchaserInfoReceiveFailed(error);
+        }
+        else
+        {
+            listener.PurchaserInfoReceived(info);
+        }
+    }
+
+    [Serializable]
+    public class Error
+    {
+        public string message;
+        public int code;
+        public string domain;
+    }
+
+    [Serializable]
+    public class Product
+    {
+        public string title;
+        public string identifier;
+        public string description;
+        public float price;
+        public string priceString;
     }
 
     [Serializable]
@@ -324,122 +458,22 @@ public class Purchases : MonoBehaviour
     [Serializable]
     public class EntitlementsResponse
     {
-        public Dictionary<String, Entitlement> entitlements;
+        public List<EntitlementResponse> entitlements;
         public Error error;
     }
 
-    private void _receiveProducts(string productsJSON)
+    [System.Serializable]
+    public class Offering
     {
-        Debug.Log(productsJSON);
-        var response = JsonUtility.FromJson<ProductResponse>(productsJSON);
-        var error = (response.error.message != null) ? response.error : null;
-
-        if (error != null)
-        {
-            listener.ProductsReceiveFailed(error);
-        }
-        else
-        {
-            listener.ProductsReceived(response.products);
-        }
+        public string offeringId;
+        public Product product;
     }
 
-    private void _getPurchaserInfo(string arguments)
+    [System.Serializable]
+    public class EntitlementResponse
     {
-        var response = JsonUtility.FromJson<ReceivePurchaserInfoResponse>(arguments);
-        var error = (response.error.message != null) ? response.error : null;
-        var info = (response.purchaserInfo.activeSubscriptions != null)
-                    ? new PurchaserInfo(response.purchaserInfo)
-                    : null;
-        if (error != null)
-        {
-            listener.PurchaserInfoReceiveFailed(error);
-        }
-        else
-        {
-            listener.PurchaserInfoReceived(info);
-        }
+        public string entitlementId;
+        public List<Offering> offerings;
     }
 
-    private void _makePurchase(string arguments)
-    {
-        var response = JsonUtility.FromJson<MakePurchaseResponse>(arguments);
-
-        var error = (response.error.message != null) ? response.error : null;
-        var info = (response.purchaserInfo.activeSubscriptions != null)
-            ? new PurchaserInfo(response.purchaserInfo)
-            : null;
-
-    #if UNITY_ANDROID
-        bool userCanceled = (error != null && error.domain.Equals("1") && error.code == 1);
-    #else
-        bool userCanceled = (error != null && error.domain == "SKErrorDomain" && error.code == 2);
-    #endif
-
-        if (error != null)
-        {
-            listener.PurchaseFailed(response.productIdentifier, error, userCanceled);
-        } else {
-            listener.PurchaseSucceeded(response.productIdentifier, info);
-        }
-    }
-
-    private void _createAlias(string arguments)
-    {
-        ReceivePurchaserInfoMethod(arguments);
-    }
-
-    private void _receivePurchaserInfo(string arguments)
-    {
-        ReceivePurchaserInfoMethod(arguments);
-    }
-
-    private void _restoreTransactions(string arguments)
-    {
-        ReceivePurchaserInfoMethod(arguments);
-    }
-
-    private void _identify(string arguments)
-    {
-        ReceivePurchaserInfoMethod(arguments);
-    }
-
-    private void _reset(string arguments)
-    {
-        ReceivePurchaserInfoMethod(arguments);
-    }
-
-    private void _getEntitlements(string entitlementsJSON)
-    {
-        Debug.Log("entitlements " + entitlementsJSON);
-        var response = JsonUtility.FromJson<EntitlementsResponse>(entitlementsJSON);
-        var error = (response.error.message != null) ? response.error : null;
-
-        if (error != null)
-        {
-            listener.EntitlementsReceiveFailed(error);
-        }
-        else
-        {
-            listener.EntitlementsReceived(response.entitlements);
-        }
-    }
-
-    private void ReceivePurchaserInfoMethod(string arguments)
-    {
-        var response = JsonUtility.FromJson<ReceivePurchaserInfoResponse>(arguments);
-
-        var error = (response.error.message != null) ? response.error : null;
-        var info = (response.purchaserInfo.activeSubscriptions != null)
-                    ? new PurchaserInfo(response.purchaserInfo)
-                    : null;
-        if (error != null)
-        {
-            listener.PurchaserInfoReceiveFailed(error);
-        }
-        else
-        {
-            listener.PurchaserInfoReceived(info);
-        }
-    }
 }

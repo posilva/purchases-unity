@@ -84,15 +84,15 @@ public class PurchasesListener : Purchases.Listener
 
     public override void ProductsReceived(List<Purchases.Product> products)
     {
-        int yOffset = 0;
-        Debug.Log(products.Count);
-        foreach (Purchases.Product p in products)
-        {
-            Debug.Log(p);
-            String label = p.identifier + " " + p.priceString;
-            CreateButton(label, () => ButtonClicked(p.identifier), 500 + yOffset);
-            yOffset += 70;
-        }
+        //int yOffset = 0;
+        //Debug.Log(products.Count);
+        //foreach (Purchases.Product p in products)
+        //{
+        //    Debug.Log(p);
+        //    String label = p.identifier + " " + p.priceString;
+        //    CreateButton(label, () => ButtonClicked(p.identifier), 500 + yOffset);
+        //    yOffset += 70;
+        //}
     }
 
     public override void ProductsReceiveFailed(Purchases.Error error)
@@ -149,11 +149,28 @@ public class PurchasesListener : Purchases.Listener
 
     public override void EntitlementsReceived(Dictionary<string, Purchases.Entitlement> entitlements)
     {
-        throw new NotImplementedException();
+        Debug.Log("entitlements received " + entitlements);
+        int yOffset = 0;
+        
+        foreach (Purchases.Entitlement entitlement in entitlements.Values)
+        {
+            foreach (KeyValuePair<string, Purchases.Product> offering in entitlement.offerings)
+            {
+                Purchases.Product product = offering.Value;
+                Debug.Log(product);
+                Debug.Log(product.identifier);
+                if (product != null) {
+                    String label = product.identifier + " " + product.priceString;
+                    CreateButton(label, () => ButtonClicked(product.identifier), 500 + yOffset);
+                    yOffset += 70;
+                }
+
+            }
+        }
     }
 
     public override void EntitlementsReceiveFailed(Purchases.Error error)
     {
-        throw new NotImplementedException();
+        Debug.Log("Subtester: " + JsonUtility.ToJson(error));
     }
 }

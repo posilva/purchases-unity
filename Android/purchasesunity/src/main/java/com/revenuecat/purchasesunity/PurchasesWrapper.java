@@ -298,27 +298,35 @@ public class PurchasesWrapper {
     }
 
     private static JSONObject mapEntitlementMap(@NonNull Map<String, Entitlement> entitlementMap) throws JSONException {
-        JSONObject response = new JSONObject();
+        JSONArray entitlementsArray = new JSONArray();
+        JSONObject entitlementObject = new JSONObject();
         for (String entId : entitlementMap.keySet()) {
             Entitlement ent = entitlementMap.get(entId);
-            JSONObject offeringsMap = new JSONObject();
+            JSONArray offeringsArray = new JSONArray();
             if (ent != null) {
                 Map<String, Offering> offerings = ent.getOfferings();
                 for (String offeringId : offerings.keySet()) {
                     Offering offering = offerings.get(offeringId);
+                    JSONObject offeringObject = new JSONObject();
                     if (offering != null) {
+                        offeringObject.put("offeringId", offeringId);
                         SkuDetails skuDetails = offering.getSkuDetails();
                         if (skuDetails != null) {
                             JSONObject product = mapForSkuDetails(skuDetails);
-                            offeringsMap.put(offeringId, product);
+                            offeringObject.put("product", product);
                         } else {
-                            offeringsMap.put(offeringId, JSONObject.NULL);
+                            offeringObject.put("product", JSONObject.NULL);
                         }
                     }
+                    offeringsArray.put(offeringObject);
                 }
             }
-            response.put(entId, offeringsMap);
+            entitlementObject.put("entitlementId", entId);
+            entitlementObject.put("offerings", offeringsArray);
+            entitlementsArray.put(entitlementObject);
         }
+        JSONObject response = new JSONObject();
+        response.put("entitlements", entitlementsArray);
         return response;
     }
 }
