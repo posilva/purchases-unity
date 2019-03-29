@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -13,4 +14,8 @@ public interface PurchasesWrapper
 	void Identify(string appUserID);
 	void Reset();
 	void SetFinishTransactions(bool finishTransactions);
+    void SetAllowSharingStoreAccount(bool allow);
+    void SetDebugLogsEnabled(bool enabled);
+    void GetPurchaserInfo();
+    void GetEntitlements();
 }

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
@@ -75,6 +76,34 @@ public class PurchasesWrapperiOS : PurchasesWrapper
     public void SetFinishTransactions(bool finishTransactions)
     {
         _RCSetFinishTransactions(finishTransactions);
+    }
+
+    [DllImport("__Internal")]
+    private static extern void _RCSetAllowSharingStoreAccount(bool allow);
+    public void SetAllowSharingStoreAccount(bool allow)
+    {
+        _RCSetAllowSharingStoreAccount(allow);
+    }
+
+    [DllImport("__Internal")]
+    private static extern void _RCSetDebugLogsEnabled(bool enabled);
+    public void SetDebugLogsEnabled(bool enabled)
+    {
+        _RCSetDebugLogsEnabled(enabled);
+    }
+
+    [DllImport("__Internal")]
+    private static extern void _RCGetPurchaserInfo();
+    public void GetPurchaserInfo()
+    {
+        _RCGetPurchaserInfo();
+    }
+
+    [DllImport("__Internal")]
+    private static extern void _RCGetEntitlements();
+    public void GetEntitlements()
+    {
+        _RCGetEntitlements();
     }
 
 }

@@ -8,19 +8,18 @@ using System.Collections.Generic;
 
 public class Purchases : MonoBehaviour
 {
-    public abstract class Listener : MonoBehaviour
+
+    public delegate void GetProductsFunc(List<Product> products, Error error);
+
+    public delegate void MakePurchaseFunc(string productIdentifier, PurchaserInfo purchaserInfo, bool userCancelled, Error error);
+
+    public delegate void PurchaserInfoFunc(PurchaserInfo purchaserInfo, Error error);
+
+    public delegate void GetEntitlementsFunc(Dictionary<string, Entitlement> entitlements, Error error);
+
+    public abstract class UpdatedPurchaserInfoListener : MonoBehaviour
     {
-        public abstract void ProductsReceived(List<Product> products);
-
-        public abstract void PurchaseSucceeded(string productIdentifier, PurchaserInfo purchaserInfo);
-        public abstract void PurchaseFailed(string productIdentifier, Error error, bool userCanceled);
-
         public abstract void PurchaserInfoReceived(PurchaserInfo purchaserInfo);
-        public abstract void PurchaserInfoReceiveFailed(Error error);
-
-        public abstract void RestoredPurchases(PurchaserInfo purchaserInfo);
-        public abstract void RestorePurchasesFailed(Error error);
-        public abstract void AliasCreated(Error error);
     }
 
     private class PurchasesWrapperNoop : PurchasesWrapper
@@ -69,6 +68,32 @@ public class Purchases : MonoBehaviour
         {
 
         }
+
+        public void SetAllowSharingStoreAccount(bool allow)
+        {
+
+        }
+
+        public void GetAppUserID()
+        {
+
+        }
+
+        public void SetDebugLogsEnabled(bool enabled)
+        {
+
+        }
+
+        public void GetPurchaserInfo()
+        {
+
+        }
+
+        public void GetEntitlements()
+        {
+
+        }
+
     }
 
     /*
@@ -130,23 +155,26 @@ public class Purchases : MonoBehaviour
         }
     }
 
-    [Serializable]
-    public class Error
+    public class Entitlement
     {
-        public string message;
-        public int code;
-        public string domain;
+
+        public Dictionary<string, Product> offerings;
+
+        public Entitlement(EntitlementResponse response)
+        {
+            this.offerings = new Dictionary<string, Product>();
+            foreach (Offering offering in response.offerings)
+            {
+                Debug.Log("offering " + offering.product);
+                if (offering.product.identifier != null)
+                {
+                    this.offerings.Add(offering.offeringId, offering.product);
+                }
+            }
+        }
+
     }
 
-    [Serializable]
-    public class Product
-    {
-        public string title;
-        public string identifier;
-        public string description;
-        public float price;
-        public string priceString;
-    }
 
     [Tooltip("Your RevenueCat API Key. Get from https://app.revenuecat.com/")]
     public string revenueCatAPIKey;
@@ -159,7 +187,7 @@ public class Purchases : MonoBehaviour
     public string[] productIdentifiers;
 
     [Tooltip("A subclass of Purchases.Listener component. Use your custom subclass to define how to handle events.")]
-    public Listener listener;
+    //public Listener listener;
 
     private PurchasesWrapper wrapper;
 
@@ -176,7 +204,7 @@ public class Purchases : MonoBehaviour
 #endif
 
         Setup(appUserID);
-        GetProducts(productIdentifiers);
+        GetProducts(productIdentifiers, null);
     }
 
     // Call this if you want to reset with a new user id
@@ -185,21 +213,31 @@ public class Purchases : MonoBehaviour
         wrapper.Setup(gameObject.name, revenueCatAPIKey, newUserID);
     }
 
-    // Optionally call this if you want to fetch more products, 
+    private GetProductsFunc productsCallback { get; set; }
+
+    // Optionally call this if you want to fetch more products,
     // called automatically with pre-configured products
-    public void GetProducts(string[] products)
+    public void GetProducts(string[] products, GetProductsFunc callback)
     {
+        productsCallback = callback;
         wrapper.GetProducts(products);
     }
 
+    private MakePurchaseFunc makePurchaseCallback { get; set; }
+
     // Call this to initiate a purchase
-    public void MakePurchase(string productIdentifier, string type = "subs", string oldSku = null)
+    public void MakePurchase(string productIdentifier, MakePurchaseFunc callback,
+        string type = "subs", string oldSku = null)
     {
+        makePurchaseCallback = callback;
         wrapper.MakePurchase(productIdentifier, type, oldSku);
     }
 
-    public void RestoreTransactions()
+    private PurchaserInfoFunc restoreTransactionsCallback { get; set; }
+
+    public void RestoreTransactions(PurchaserInfoFunc callback)
     {
+        restoreTransactionsCallback = callback;
         wrapper.RestoreTransactions();
     }
 
@@ -235,18 +273,27 @@ public class Purchases : MonoBehaviour
         wrapper.AddAttributionData((int)network, dataJSON);
     }
 
-    public void CreateAlias(string newAppUserID)
+    private PurchaserInfoFunc createAliasCallback { get; set; }
+
+    public void CreateAlias(string newAppUserID, PurchaserInfoFunc callback)
     {
+        createAliasCallback = callback;
         wrapper.CreateAlias(newAppUserID);
     }
 
-    public void Identify(string appUserID)
+    private PurchaserInfoFunc identifyCallback { get; set; }
+
+    public void Identify(string appUserID, PurchaserInfoFunc callback)
     {
+        identifyCallback = callback;
         wrapper.Identify(appUserID);
     }
 
-    public void Reset()
+    private PurchaserInfoFunc resetCallback { get; set; }
+
+    public void Reset(PurchaserInfoFunc callback)
     {
+        resetCallback = callback;
         wrapper.Reset();
     }
 
@@ -255,26 +302,217 @@ public class Purchases : MonoBehaviour
         wrapper.SetFinishTransactions(finishTransactions);
     }
 
-    [Serializable]
-    private class ProductResponse
+    public void SetAllowSharingStoreAccount(bool allow)
     {
-        public List<Product> products;
+        wrapper.SetAllowSharingStoreAccount(allow);
+    }
+
+    public void SetDebugLogsEnabled(bool enabled)
+    {
+        wrapper.SetDebugLogsEnabled(enabled);
+    }
+
+    private PurchaserInfoFunc getPurchaserInfoCallback { get; set; }
+
+    public void GetPurchaserInfo(PurchaserInfoFunc callback)
+    {
+        getPurchaserInfoCallback = callback;
+        wrapper.GetPurchaserInfo();
+    }
+
+    private GetEntitlementsFunc getEntitlementsCallback { get; set; }
+
+    public void GetEntitlements(GetEntitlementsFunc callback)
+    {
+        getEntitlementsCallback = callback;
+        wrapper.GetEntitlements();
     }
 
     private void _receiveProducts(string productsJSON)
     {
-        ProductResponse response = JsonUtility.FromJson<ProductResponse>(productsJSON);
-        listener.ProductsReceived(response.products);
+        Debug.Log("_receiveProducts " + productsJSON);
+        var response = JsonUtility.FromJson<ProductResponse>(productsJSON);
+        var error = (response.error.message != null) ? response.error : null;
+
+        if (productsCallback != null)
+        {
+            if (error != null)
+            {
+                productsCallback(null, error);
+            }
+            else
+            {
+                productsCallback(response.products, null);
+            }
+            productsCallback = null;
+        }
+    }
+
+    private void _getPurchaserInfo(string purchaserInfoJSON)
+    {
+        Debug.Log("_getPurchaserInfo " + purchaserInfoJSON);
+        var response = JsonUtility.FromJson<ReceivePurchaserInfoResponse>(purchaserInfoJSON);
+        var error = (response.error.message != null) ? response.error : null;
+        var info = (response.purchaserInfo.activeSubscriptions != null)
+                    ? new PurchaserInfo(response.purchaserInfo)
+                    : null;
+        if (getPurchaserInfoCallback != null)
+        {
+            if (error != null)
+            {
+                getPurchaserInfoCallback(null, error);
+            }
+            else
+            {
+                getPurchaserInfoCallback(info, null);
+            }
+            getPurchaserInfoCallback = null;
+        }
+    }
+
+    private void _makePurchase(string makePurchaseResponseJSON)
+    {
+        Debug.Log("_makePurchase " + makePurchaseResponseJSON);
+        var response = JsonUtility.FromJson<MakePurchaseResponse>(makePurchaseResponseJSON);
+
+        var error = (response.error.message != null) ? response.error : null;
+        var info = (response.purchaserInfo.activeSubscriptions != null)
+            ? new PurchaserInfo(response.purchaserInfo)
+            : null;
+        var userCancelled = response.userCancelled;
+
+        if (makePurchaseCallback != null)
+        {
+            if (error != null)
+            {
+                makePurchaseCallback(null, null, userCancelled, error);
+            }
+            else
+            {
+                makePurchaseCallback(response.productIdentifier, info, false, null);
+            }
+            makePurchaseCallback = null;
+
+        }
+    }
+
+    private void _createAlias(string purchaserInfoJSON)
+    {
+        Debug.Log("_createAlias " + purchaserInfoJSON);
+        ReceivePurchaserInfoMethod(purchaserInfoJSON, createAliasCallback);
+    }
+
+    private void _receivePurchaserInfo(string purchaserInfoJSON)
+    {
+        Debug.Log("_receivePurchaserInfo " + purchaserInfoJSON);
+        ReceivePurchaserInfoMethod(purchaserInfoJSON, getPurchaserInfoCallback);
+    }
+
+    private void _restoreTransactions(string purchaserInfoJSON)
+    {
+        Debug.Log("_restoreTransactions " + purchaserInfoJSON);
+        ReceivePurchaserInfoMethod(purchaserInfoJSON, restoreTransactionsCallback);
+    }
+
+    private void _identify(string purchaserInfoJSON)
+    {
+        Debug.Log("_identify " + purchaserInfoJSON);
+        ReceivePurchaserInfoMethod(purchaserInfoJSON, identifyCallback);
+    }
+
+    private void _reset(string purchaserInfoJSON)
+    {
+        Debug.Log("_reset " + purchaserInfoJSON);
+        ReceivePurchaserInfoMethod(purchaserInfoJSON, resetCallback);
+    }
+
+    private void _getEntitlements(string entitlementsJSON)
+    {
+        Debug.Log("_getEntitlements " + entitlementsJSON);
+        if (getEntitlementsCallback != null)
+        {
+            EntitlementsResponse response = JsonUtility.FromJson<EntitlementsResponse>(entitlementsJSON);
+            var error = (response.error.message != null) ? response.error : null;
+            if (error != null)
+            {
+                getEntitlementsCallback(null, error);
+            }
+            else
+            {
+                Dictionary<string, Entitlement> entitlements = new Dictionary<string, Entitlement>();
+                foreach (EntitlementResponse entitlementResponse in response.entitlements)
+                {
+                    Debug.Log(entitlementResponse.entitlementId);
+                    entitlements.Add(entitlementResponse.entitlementId, new Entitlement(entitlementResponse));
+                }
+                getEntitlementsCallback(entitlements, null);
+            }
+            getEntitlementsCallback = null;
+        }
+    }
+
+    private void ReceivePurchaserInfoMethod(string arguments, PurchaserInfoFunc callback)
+    {
+        if (callback != null)
+        {
+            var response = JsonUtility.FromJson<ReceivePurchaserInfoResponse>(arguments);
+
+            var error = (response.error.message != null) ? response.error : null;
+            var info = (response.purchaserInfo.activeSubscriptions != null)
+                        ? new PurchaserInfo(response.purchaserInfo)
+                        : null;
+            if (error != null)
+            {
+                callback(null, error);
+            }
+            else
+            {
+                callback(info, null);
+            }
+            callback = null;
+            // TODO: test it nullifies it
+        }
+    }
+
+    [Serializable]
+    public class Error
+    {
+        public string message;
+        public int code;
+        public string domain;
+    }
+
+    [Serializable]
+    public class Product
+    {
+        public string title;
+        public string identifier;
+        public string description;
+        public float price;
+        public string priceString;
+    }
+
+    [Serializable]
+    private class ProductResponse
+    {
+        public List<Product> products;
+        public Error error;
     }
 
     [Serializable]
     private class ReceivePurchaserInfoResponse
     {
+        public PurchaserInfoResponse purchaserInfo;
+        public Error error;
+    }
+
+    [Serializable]
+    private class MakePurchaseResponse
+    {
         public string productIdentifier;
         public PurchaserInfoResponse purchaserInfo;
         public Error error;
-        public bool isRestore;
-        public bool isPurchase;
+        public bool userCancelled;
     }
 
     [Serializable]
@@ -287,59 +525,25 @@ public class Purchases : MonoBehaviour
         public List<long> allExpirationDateValues;
     }
 
-    private void _receivePurchaserInfo(string arguments)
+    [Serializable]
+    public class EntitlementsResponse
     {
-        var response = JsonUtility.FromJson<ReceivePurchaserInfoResponse>(arguments);
-
-        var error = (response.error.message != null) ? response.error : null;
-        var info = (response.purchaserInfo.activeSubscriptions != null)
-            ? new PurchaserInfo(response.purchaserInfo)
-            : null;
-
-        var isPurchase = response.isPurchase;
-        var isRestore = response.isRestore;
-
-#if UNITY_ANDROID
-        bool userCanceled = (error != null && error.domain.Equals("1") && error.code == 1);
-#else
-        bool userCanceled = (error != null && error.domain == "SKErrorDomain" && error.code == 2);
-#endif
-
-        if (error != null)
-        {
-            if (isPurchase)
-            {
-                listener.PurchaseFailed(response.productIdentifier, error, userCanceled);
-            }
-            else if (isRestore)
-            {
-                listener.RestorePurchasesFailed(error);
-            }
-            else
-            {
-                listener.PurchaserInfoReceiveFailed(error);
-            }
-        }
-        else
-        {
-            if (isPurchase)
-            {
-                listener.PurchaseSucceeded(response.productIdentifier, info);
-            }
-            else if (isRestore)
-            {
-                listener.RestoredPurchases(info);
-            }
-            else
-            {
-                listener.PurchaserInfoReceived(info);
-            }
-        }
+        public List<EntitlementResponse> entitlements;
+        public Error error;
     }
 
-    private void _aliasCreated(string arguments)
+    [System.Serializable]
+    public class Offering
     {
-        var error = JsonUtility.FromJson<Error>(arguments);
-        listener.AliasCreated((error.message != null) ? error : null);
+        public string offeringId;
+        public Product product;
     }
+
+    [System.Serializable]
+    public class EntitlementResponse
+    {
+        public string entitlementId;
+        public List<Offering> offerings;
+    }
+
 }
