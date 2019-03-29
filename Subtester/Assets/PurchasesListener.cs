@@ -84,10 +84,22 @@ public class PurchasesListener : Purchases.UpdatedPurchaserInfoListener
         });
     }
 
+    [Serializable]
+    public class AdjustData
+    {
+        public string adid;
+        public string network;
+        public string adgroup;
+        public string campaign;
+        public string creative;
+        public string clickLabel;
+        public string trackerName;
+        public string trackerToken;
+    }
     void SendAttribution()
     {
         Purchases purchases = GetComponent<Purchases>();
-        Purchases.AdjustData data = new Purchases.AdjustData
+        AdjustData data = new AdjustData
         {
             adid = "test",
             network = "network",

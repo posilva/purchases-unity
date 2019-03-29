@@ -241,19 +241,6 @@ public class Purchases : MonoBehaviour
         wrapper.RestoreTransactions();
     }
 
-    [Serializable]
-    public class AdjustData
-    {
-        public string adid;
-        public string network;
-        public string adgroup;
-        public string campaign;
-        public string creative;
-        public string clickLabel;
-        public string trackerName;
-        public string trackerToken;
-    }
-
     public enum AttributionNetwork
     {
         APPLE_SEARCH_ADS = 0,
@@ -262,11 +249,6 @@ public class Purchases : MonoBehaviour
         BRANCH = 3,
         TENJIN = 4
     };
-
-    public void AddAdjustAttributionData(AdjustData data)
-    {
-        wrapper.AddAttributionData((int)AttributionNetwork.ADJUST, JsonUtility.ToJson(data));
-    }
 
     public void AddAttributionData(string dataJSON, AttributionNetwork network)
     {
